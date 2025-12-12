@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en" class="transition-colors duration-500 dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <!-- Apple & Favicon Icons -->
+    <link rel="apple-touch-icon" href="https://cricstars.aimaverick.me/cric.png">
+    <link rel="icon" type="image/png" href="https://cricstars.aimaverick.me/cric.png">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://cricstars.aimaverick.me">
+    <meta property="og:title" content="Cric Stars - Visualize Cricket Legends">
+    <meta property="og:description" content="A dashboard to visualize cricket stars batting and bowling stats across ODI, Test, and T20">
+    <meta property="og:image" content="https://cricstars.aimaverick.me/cric_og.png">
+
+    <title>Cric Stars Dashboard</title>
+    <script src="cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: { slate: { 850: '#151e2e', 900: '#0f172a', 950: '#020617' } },
+                    animation: {
+                        'fade-in': 'fadeIn 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards',
+                        'slide-up': 'slideUp 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards',
+                    },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+                        slideUp: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.5); }
+        .dark .glass { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .glass-card { background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.4) 100%); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1); }
+        .dark .glass-card { background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.4) 100%); border: 1px solid rgba(255, 255, 255, 0.05); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3); }
+        
+        #tooltip { position: absolute; opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease; z-index: 9999; transform: translate(-50%, -120%); }
+        #tooltip::after { content: ''; position: absolute; top: 100%; left: 50%; margin-left: -6px; border-width: 6px; border-style: solid; border-color: var(--tooltip-bg, white) transparent transparent transparent; }
+        
+        .chart-point { transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease, filter 0.3s ease; cursor: pointer; }
+        .trend-line { stroke-dasharray: 2000; stroke-dashoffset: 2000; animation: dash 2.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+        .dark .trend-line { filter: drop-shadow(0 0 4px currentColor); }
+        @keyframes dash { to { stroke-dashoffset: 0; } }
+        
+        .legend-item { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .legend-item:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .legend-item.active { transform: scale(1.05); font-weight: 800; box-shadow: 0 4px 15px rgba(0,0,0,0.15); border-color: currentColor; }
+        .legend-item.inactive { opacity: 0.5; filter: grayscale(0.8); transform: scale(0.95); }
+        .format-btn.active, .role-btn.active { background-color: #2563EB; color: white; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
+        .dark .format-btn.active, .dark .role-btn.active { background-color: #3B82F6; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-indigo-50 via-blue-50 to-slate-100 dark:from-[#050b14] dark:via-[#0f172a] dark:to-[#1e1b4b] text-slate-800 dark:text-slate-200 min-h-screen pb-16 selection:bg-blue-200 dark:selection:bg-blue-900 transition-colors duration-500 overflow-x-hidden relative flex flex-col">
+
+    <!-- Decoration Blurs -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div class="absolute top-0 left-0 w-[500px] h-[500px] bg-blue-500/10 dark:bg-blue-600/10 rounded-full blur-[100px] -translate-x-1/2 -translate-y-1/2"></div>
+        <div class="absolute bottom-0 right-0 w-[500px] h-[500px] bg-purple-500/10 dark:bg-purple-600/10 rounded-full blur-[100px] translate-x-1/2 translate-y-1/2"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="relative z-10 max-w-7xl mx-auto w-full p-4 md:p-6 mb-2 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 animate-fade-in">
+        <div class="text-left w-full lg:w-auto flex items-center gap-4">
+            <img src="cric.png" alt="Cric Stars" class="w-12 h-12 md:w-16 md:h-16 object-contain drop-shadow-md" onerror="this.style.display='none'">
+            <div>
+                <h1 class="text-3xl md:text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-700 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-300 dark:to-purple-400 tracking-tighter drop-shadow-sm filter">
+                    Cric Stars
+                </h1>
+                <p class="text-slate-500 dark:text-slate-400 font-medium text-xs md:text-sm mt-1 tracking-wide">
+                    Where Legends Meet Data
+                </p>
+            </div>
+        </div>
+
+        <!-- Mobile Theme Toggle -->
+        <button id="themeToggleMobile" class="lg:hidden absolute top-4 right-4 glass p-2.5 rounded-full text-slate-600 dark:text-yellow-400 hover:scale-110 transition-all duration-300 shadow-lg z-50">
+            <svg class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+        </button>
+
+        <div class="flex flex-col sm:flex-row items-center gap-4 w-full lg:w-auto">
+            <!-- Bat / Ball Toggle -->
+            <div class="glass p-1 rounded-full flex items-center gap-1 shadow-sm">
+                <button onclick="setRole('BAT')" id="btn-bat" class="role-btn active px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-300 flex items-center gap-1 hover:bg-white/50 dark:hover:bg-slate-700">
+                    <img src="b1.png" class="w-4 h-4 object-contain inline-block mr-1 opacity-90">
+                    BAT
+                </button>
+                <button onclick="setRole('BOWL')" id="btn-bowl" class="role-btn px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-300 flex items-center gap-1 hover:bg-white/50 dark:hover:bg-slate-700">
+                    <img src="b2.png" class="w-4 h-4 object-contain inline-block mr-1 opacity-90">
+                    BOWL
+                </button>
+            </div>
+            <!-- Format Toggle -->
+            <div class="glass p-1 rounded-full flex items-center gap-1 shadow-sm overflow-x-auto max-w-full">
+                <button onclick="setFormat('TEST')" id="btn-test" class="format-btn px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-300 text-slate-600 dark:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700 whitespace-nowrap">TEST</button>
+                <button onclick="setFormat('ODI')" id="btn-odi" class="format-btn active px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-300 text-slate-600 dark:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700 whitespace-nowrap">ODI</button>
+                <button onclick="setFormat('T20')" id="btn-t20" class="format-btn px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-300 text-slate-600 dark:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700 whitespace-nowrap">T20I</button>
+            </div>
+            <!-- Desktop Theme -->
+            <button id="themeToggleDesktop" class="hidden lg:block glass p-2.5 rounded-full text-slate-600 dark:text-yellow-400 hover:scale-110 transition-all duration-300 shadow-lg ml-2">
+                <svg class="w-5 h-5 hidden dark:block drop-shadow-[0_0_8px_rgba(250,204,21,0.6)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                <svg class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+            </button>
+        </div>
+    </header>
+
+    <main class="relative z-10 max-w-7xl mx-auto w-full px-4 md:px-6 space-y-6 flex-grow">
+        <!-- Controls -->
+        <div class="glass-card rounded-2xl p-1 animate-slide-up" style="animation-delay: 0.1s;">
+            <div class="p-4 md:p-5 flex flex-col md:flex-row items-center gap-4 md:gap-6 border-b border-slate-200/50 dark:border-white/5">
+                 <div class="flex items-center gap-4 w-full md:w-auto justify-center md:justify-start">
+                    <div class="p-3 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/30 transition-colors duration-300" id="role-icon-bg">
+                        <!-- Icon changes via JS -->
+                        <img id="role-icon" src="b1.png" class="w-6 h-6 object-contain filter brightness-0 invert">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Experience</label>
+                        <div class="text-2xl font-black text-slate-800 dark:text-white tabular-nums tracking-tight">
+                            <span id="inningsVal">40</span><span class="text-sm font-semibold text-slate-400 ml-1" id="exp-label">+ Innings</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex-1 w-full relative pt-2 md:pt-0">
+                    <input type="range" id="inningsSlider" min="20" max="450" value="40" class="w-full h-3 bg-slate-200 dark:bg-slate-700/50 rounded-full appearance-none cursor-pointer accent-blue-600 hover:accent-blue-500 transition-colors z-10 relative">
+                    <div class="flex justify-between text-[10px] font-bold text-slate-400 mt-2 px-1 uppercase tracking-widest">
+                        <span>Rookie</span>
+                        <span>Veteran</span>
+                        <span>Legend</span>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-slate-50/50 dark:bg-slate-900/30 p-4 md:px-6 rounded-b-xl">
+                <div class="flex flex-wrap items-center justify-center gap-2" id="legend-container"></div>
+            </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Chart 1 -->
+            <div class="col-span-1 lg:col-span-2 glass-card rounded-3xl relative animate-slide-up overflow-hidden" style="animation-delay: 0.2s;">
+                <div class="p-4 px-6 border-b border-slate-200/50 dark:border-white/5 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white/30 dark:bg-white/5 gap-2">
+                    <h2 class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2" id="title-c1">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-green-400 to-emerald-600 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.4)]"></span>Batting Consistency
+                    </h2>
+                </div>
+                <div id="chart-avg" class="w-full h-[280px] md:h-[340px] relative"></div>
+            </div>
+            <!-- Chart 2 -->
+            <div class="glass-card rounded-3xl relative animate-slide-up overflow-hidden" style="animation-delay: 0.3s;">
+                <div class="p-4 px-6 border-b border-slate-200/50 dark:border-white/5 flex justify-between items-center bg-white/30 dark:bg-white/5">
+                    <h2 class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2" id="title-c2">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-blue-400 to-indigo-600 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.4)]"></span>Run Accumulation
+                    </h2>
+                </div>
+                <div id="chart-runs" class="w-full h-[280px] md:h-[340px] relative"></div>
+            </div>
+            <!-- Chart 3 -->
+            <div class="glass-card rounded-3xl relative animate-slide-up overflow-hidden" style="animation-delay: 0.4s;">
+                <div class="p-4 px-6 border-b border-slate-200/50 dark:border-white/5 flex justify-between items-center bg-white/30 dark:bg-white/5">
+                    <h2 class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2" id="title-c3">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-purple-400 to-fuchsia-600 rounded-full shadow-[0_0_10px_rgba(168,85,247,0.4)]"></span>Impact Matrix
+                    </h2>
+                    <span class="text-[9px] md:text-[10px] font-bold text-purple-600 dark:text-purple-300 bg-purple-50/80 dark:bg-purple-900/30 px-2 py-1 rounded-md border border-purple-100 dark:border-purple-500/30 backdrop-blur-md" id="lbl-bubble">Bubble = Runs</span>
+                </div>
+                <div id="chart-impact" class="w-full h-[280px] md:h-[340px] relative"></div>
+            </div>
+        </div>
+
+        <div class="text-center pt-6 pb-20">
+            <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold opacity-60">Data Source: <a href="https://www.espncricinfo.com/" target="_blank" class="hover:text-blue-500 transition-colors underline decoration-slate-300/50">ESPNcricinfo</a> (Updated 2025)</p>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="fixed bottom-0 w-full glass z-50 border-t border-slate-200/50 dark:border-white/5 py-3 px-6">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider gap-2 md:gap-0">
+            <div>© 2025 amsubhzd</div>
+            <div class="md:absolute md:left-1/2 md:-translate-x-1/2">Designed by AI Maverick</div>
+            <div>v2.5</div>
+        </div>
+    </footer>
+
+    <!-- Tooltip -->
+    <div id="tooltip" class="glass-card p-0 rounded-xl min-w-[240px] overflow-hidden shadow-2xl dark:shadow-black ring-1 ring-white/20">
+        <div class="bg-slate-50/80 dark:bg-slate-900/80 px-4 py-3 border-b border-slate-200/50 dark:border-white/10 flex justify-between items-center">
+            <span class="font-extrabold text-slate-800 dark:text-white text-sm tracking-tight" id="tt-name"></span>
+            <span class="text-[9px] font-black text-white px-2 py-0.5 rounded shadow-sm tracking-wide" id="tt-country-badge"></span>
+        </div>
+        <div class="p-4 bg-white/40 dark:bg-slate-800/40">
+            <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-xs font-medium mb-3">
+                <div class="text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[9px] flex items-center" id="tt-lbl-1">Innings</div>
+                <div class="text-right font-mono font-bold text-slate-700 dark:text-slate-200" id="tt-val-1">0</div>
+                <div class="text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[9px] flex items-center" id="tt-lbl-2">Runs</div>
+                <div class="text-right font-mono font-bold text-slate-700 dark:text-slate-200" id="tt-val-2">0</div>
+                <div class="text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[9px] flex items-center" id="tt-lbl-3">Average</div>
+                <div class="text-right font-mono font-bold text-slate-900 dark:text-white bg-slate-200/50 dark:bg-slate-700/50 px-1.5 rounded" id="tt-val-3">0.00</div>
+                <div class="text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[9px] flex items-center" id="tt-lbl-4">Strike Rate</div>
+                <div class="text-right font-mono font-bold text-purple-600 dark:text-purple-400" id="tt-val-4">0.00</div>
+            </div>
+            <div class="h-px bg-slate-200/50 dark:bg-white/10 mb-3"></div>
+            
+            <div id="tt-bat-container" class="flex flex-col gap-1.5 px-1">
+                <!-- Milestones injected here via JS -->
+            </div>
+
+            <div id="tt-bowl-container" class="hidden flex justify-between items-center px-2 pt-1">
+                <div class="text-center"><div class="text-[9px] uppercase font-bold text-slate-500">5W</div><div class="font-bold text-slate-800 dark:text-white" id="tt-5w">0</div></div>
+                <div class="text-center"><div class="text-[9px] uppercase font-bold text-slate-500">Best</div><div class="font-bold text-blue-600 dark:text-blue-400" id="tt-bb">0/0</div></div>
+                <div class="text-center"><div class="text-[9px] uppercase font-bold text-slate-500">Econ</div><div class="font-bold text-slate-800 dark:text-white" id="tt-econ">0.00</div></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // SEPARATE DATA STORES
+        let BAT_DATA = [];
+        let BOWL_DATA = [];
+
+        // Colors
+        const COUNTRY_COLORS = { 
+            "India": "#F97316", 
+            "Australia": "#EAB308", 
+            "England": "#2563EB", 
+            "South Africa": "#7c3aed", // Violet
+            "New Zealand": "#EC4899", 
+            "Pakistan": "#10B981", 
+            "Sri Lanka": "#1E3A8A", 
+            "West Indies": "#881337",
+            "Others": "#64748b"
+        };
+
+        let currentFormat = 'ODI';
+        let currentRole = 'BAT';
+        let minInnings = 40;
+        let selectedCountry = null;
+        const padding = { top: 20, right: 30, bottom: 40, left: 50 };
+
+        async function loadData() {
+            try {
+                const results = await Promise.all([
+                    fetch('batsmen.json').then(res => res.json()),
+                    fetch('bowler.json').then(res => res.json())
+                ]);
+                BAT_DATA = results[0];
+                BOWL_DATA = results[1];
+            } catch (e) {
+                console.warn("JSON load failed (CORS/Missing), switching to fallback data.", e);
+                document.getElementById('legend-container').innerHTML = '<div class="text-red-500 text-xs text-center w-full">Error loading data files (batsmen.json, bowler.json).<br>Please ensure they are present in the directory.</div>';
+            } finally {
+                renderLegend();
+                updateCharts();
+            }
+        }
+
+        function setFormat(format) {
+            currentFormat = format;
+            document.querySelectorAll('.format-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${format.toLowerCase()}`).classList.add('active');
+            
+            const slider = document.getElementById('inningsSlider');
+            if (currentRole === 'BAT') {
+                if (format === 'TEST') { slider.min = 20; slider.max = 200; slider.value = 50; minInnings = 50; }
+                else if (format === 'T20') { slider.min = 10; slider.max = 120; slider.value = 30; minInnings = 30; }
+                else { slider.min = 20; slider.max = 450; slider.value = 40; minInnings = 40; }
+            } else {
+                if (format === 'TEST') { slider.min = 20; slider.max = 150; slider.value = 40; minInnings = 40; }
+                else if (format === 'T20') { slider.min = 20; slider.max = 120; slider.value = 30; minInnings = 30; }
+                else { slider.min = 50; slider.max = 350; slider.value = 80; minInnings = 80; }
+            }
+            document.getElementById('inningsVal').innerText = minInnings;
+            renderLegend();
+            updateCharts();
+        }
+
+        function setRole(role) {
+            currentRole = role;
+            document.querySelectorAll('.role-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${role.toLowerCase()}`).classList.add('active');
+            const expLabel = document.getElementById('exp-label');
+            expLabel.innerText = role === 'BAT' ? '+ Innings' : '+ Matches';
+            
+            const iconSvg = role === 'BAT' 
+                ? '<img src="b1.png" class="w-6 h-6 object-contain filter brightness-0 invert">'
+                : '<img src="b2.png" class="w-6 h-6 object-contain filter brightness-0 invert">';
+            document.getElementById('role-icon-bg').innerHTML = iconSvg;
+
+            // Updated Titles (Visual 3 is always "Impact Matrix")
+            if (role === 'BAT') {
+                document.getElementById('title-c1').innerHTML = `<span class="w-1.5 h-6 bg-gradient-to-b from-green-400 to-emerald-600 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.4)]"></span>Batting Consistency`;
+                document.getElementById('title-c2').innerHTML = `<span class="w-1.5 h-6 bg-gradient-to-b from-blue-400 to-indigo-600 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.4)]"></span>Run Accumulation`;
+                document.getElementById('title-c3').innerHTML = `<span class="w-1.5 h-6 bg-gradient-to-b from-purple-400 to-fuchsia-600 rounded-full shadow-[0_0_10px_rgba(168,85,247,0.4)]"></span>Impact Matrix`;
+                document.getElementById('lbl-bubble').innerText = "Bubble = Runs";
+            } else {
+                document.getElementById('title-c1').innerHTML = `<span class="w-1.5 h-6 bg-gradient-to-b from-green-400 to-emerald-600 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.4)]"></span>Bowling Average <span class="text-[10px] text-slate-500">(↓ Better)</span>`;
+                document.getElementById('title-c2').innerHTML = `<span class="w-1.5 h-6 bg-gradient-to-b from-blue-400 to-indigo-600 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.4)]"></span>Wicket Accumulation`;
+                document.getElementById('title-c3').innerHTML = `<span class="w-1.5 h-6 bg-gradient-to-b from-purple-400 to-fuchsia-600 rounded-full shadow-[0_0_10px_rgba(168,85,247,0.4)]"></span>Impact Matrix`;
+                document.getElementById('lbl-bubble').innerText = "Bubble = Wickets";
+            }
+            setFormat(currentFormat);
+        }
+
+        function initDashboard() {
+            document.getElementById('themeToggleDesktop').addEventListener('click', toggleTheme);
+            document.getElementById('themeToggleMobile').addEventListener('click', toggleTheme);
+            loadData();
+            document.getElementById('inningsSlider').addEventListener('input', (e) => {
+                minInnings = parseInt(e.target.value);
+                document.getElementById('inningsVal').innerText = minInnings;
+                updateCharts();
+            });
+        }
+
+        function renderLegend() {
+            const legendContainer = document.getElementById('legend-container');
+            legendContainer.innerHTML = '';
+            
+            const allBtn = document.createElement('button');
+            allBtn.className = `legend-item flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider cursor-pointer border transition-all ${!selectedCountry 
+                ? 'bg-slate-800 text-white dark:bg-white dark:text-slate-900 border-transparent shadow-md active' 
+                : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`;
+            allBtn.innerHTML = `All Stars`;
+            allBtn.onclick = () => { selectedCountry = null; renderLegend(); updateCharts(); };
+            legendContainer.appendChild(allBtn);
+
+            const data = getFilteredData();
+            const presentCountries = [...new Set(data.map(p => COUNTRY_COLORS[p.country] ? p.country : "Others"))];
+            presentCountries.sort();
+
+            presentCountries.forEach(countryKey => {
+                const color = COUNTRY_COLORS[countryKey];
+                const isSelected = selectedCountry === countryKey;
+                const badge = document.createElement('button');
+                badge.className = `legend-item flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[10px] font-bold transition-all cursor-pointer ${isSelected 
+                    ? 'shadow-md active border-transparent text-white' 
+                    : 'bg-white/60 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700'}`;
+                if (isSelected) badge.style.backgroundColor = color;
+                
+                const jerseyIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="${isSelected ? 'white' : color}" style="margin-right:2px;"><path d="M3 4 C3 3 4 2 5 2 L9 2 C9 2 9 4 12 4 C15 4 15 2 15 2 L19 2 C20 2 21 3 21 4 L21 8 L18 8 L18 20 L6 20 L6 8 L3 8 Z"/></svg>`;
+                badge.innerHTML = `${jerseyIcon}${countryKey}`;
+                badge.onclick = () => { selectedCountry = isSelected ? null : countryKey; renderLegend(); updateCharts(); };
+                legendContainer.appendChild(badge);
+            });
+        }
+
+        function getFilteredData() {
+            const sourceData = currentRole === 'BAT' ? BAT_DATA : BOWL_DATA;
+            if (sourceData.length > 0) {
+                return sourceData.map(p => {
+                    const s = p.stats[currentFormat];
+                    if (!s) return null;
+                    if (currentRole === 'BAT') {
+                        if (s.innings !== undefined && s.runs !== undefined) return { ...p, ...s, role: 'BAT' };
+                    } else {
+                        if (s.matches !== undefined && s.wickets !== undefined) return { ...p, ...s, role: 'BOWL' };
+                    }
+                    return null;
+                }).filter(p => p !== null);
+            }
+            return [];
+        }
+
+        function updateCharts() {
+            let data = getFilteredData().filter(p => {
+                const metric = currentRole === 'BAT' ? p.innings : p.matches;
+                return metric >= minInnings;
+            });
+            
+            if(currentRole === 'BAT') {
+                const modelAvg = calculateQuadraticRegression(data, 'innings', 'average');
+                const modelRuns = calculateQuadraticRegression(data, 'innings', 'runs');
+                
+                // Filter Bradman from Impact Matrix
+                const impactData = data.filter(p => p.name !== "Donald Bradman");
+
+                renderChart('chart-avg', data, 'innings', 'average', modelAvg.predict, "Avg");
+                renderChart('chart-runs', data, 'innings', 'runs', modelRuns.predict, "Runs");
+                renderChart('chart-impact', impactData, 'average', 'sr', null, "Strike Rate", 'runs'); 
+            } else {
+                const modelAvg = calculateQuadraticRegression(data, 'matches', 'average');
+                const modelWkts = calculateQuadraticRegression(data, 'matches', 'wickets');
+                
+                renderChart('chart-avg', data, 'matches', 'average', modelAvg.predict, "Avg", null, true);
+                renderChart('chart-runs', data, 'matches', 'wickets', modelWkts.predict, "Wickets");
+                renderChart('chart-impact', data, 'average', 'economy', null, "Economy", 'wickets', true, true); 
+            }
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const tooltip = document.getElementById('tooltip');
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                tooltip.style.setProperty('--tooltip-bg', 'rgba(255, 255, 255, 0.8)');
+            } else {
+                html.classList.add('dark');
+                tooltip.style.setProperty('--tooltip-bg', 'rgba(15, 23, 42, 0.8)');
+            }
+            updateCharts();
+        }
+
+        function calculateQuadraticRegression(data, xKey, yKey) {
+            let n = data.length;
+            if (n < 3) return { predict: () => 0 }; 
+            let sumX=0, sumY=0, sumX2=0, sumX3=0, sumX4=0, sumXY=0, sumX2Y=0;
+            for (let i=0; i<n; i++) {
+                let x = data[i][xKey]; let y = data[i][yKey];
+                sumX+=x; sumY+=y; sumX2+=x*x; sumX3+=x*x*x; sumX4+=x*x*x*x; sumXY+=x*y; sumX2Y+=x*x*y;
+            }
+            const m = [[n, sumX, sumX2, sumY], [sumX, sumX2, sumX3, sumXY], [sumX2, sumX3, sumX4, sumX2Y]];
+            for (let i=0; i<3; i++) {
+                for (let k=i+1; k<3; k++) {
+                    let factor = m[k][i]/m[i][i];
+                    for (let j=i; j<=3; j++) m[k][j] -= factor*m[i][j];
+                }
+            }
+            let res = new Array(3);
+            for (let i=2; i>=0; i--) {
+                let sum = 0;
+                for (let j=i+1; j<3; j++) sum += m[i][j]*res[j];
+                res[i] = (m[i][3]-sum)/m[i][i];
+            }
+            const [c, b, a] = res;
+            return { predict: (x) => a*x*x + b*x + c };
+        }
+
+        function renderChart(containerId, data, xKey, yKey, trendFunction, yAxisLabel, zKey = null, invertY = false, invertX = false) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = ''; 
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            const isDarkMode = document.documentElement.classList.contains('dark');
+
+            const xVals = data.map(d => d[xKey]);
+            const yVals = data.map(d => d[yKey]);
+            let minZ = 0, maxZ = 0;
+            if (zKey) {
+                const zVals = data.map(d => d[zKey]);
+                minZ = Math.min(...zVals); maxZ = Math.max(...zVals);
+            }
+
+            let minX = 0;
+            let maxX = Math.max(...xVals) * 1.05 || 100;
+
+            if (xKey === 'average' || xKey === 'economy') {
+                 minX = Math.min(...xVals) * 0.9 || 0;
+                 maxX = Math.max(...xVals) * 1.05 || 10; 
+            } else {
+                 minX = Math.min(...xVals) * 0.95 || 0; 
+            }
+
+            let minY = 0;
+            let maxY = Math.max(...yVals) * 1.05 || 100;
+            
+            if (yKey === 'sr' && currentRole === 'BAT') {
+                if (currentFormat === 'TEST') { minY = 25; maxY = 90; }
+                else if (currentFormat === 'ODI') { minY = 55; maxY = 135; }
+                else if (currentFormat === 'T20') { minY = 100; maxY = 170; }
+            } else if (yKey === 'economy' && currentRole === 'BOWL') {
+                if (currentFormat === 'TEST') { minY = 2; maxY = 4; }
+                else if (currentFormat === 'ODI') { minY = 3; maxY = 6; }
+                else if (currentFormat === 'T20') { minY = 5; maxY = 9; }
+            } else if (yAxisLabel === "Economy" || yAxisLabel === "Avg") {
+                 minY = Math.min(...yVals) * 0.9 || 0;
+            } else {
+                 minY = Math.min(...yVals) * 0.9 || 0;
+            }
+
+            let scaleX;
+            if (invertX) {
+                scaleX = (val) => (width - padding.right) - ((val - minX) / (maxX - minX)) * (width - padding.left - padding.right);
+            } else {
+                scaleX = (val) => padding.left + ((val - minX) / (maxX - minX)) * (width - padding.left - padding.right);
+            }
+            
+            let scaleY;
+            if (invertY) {
+                scaleY = (val) => padding.top + ((val - minY) / (maxY - minY)) * (height - padding.bottom - padding.top);
+            } else {
+                scaleY = (val) => (height - padding.bottom) - ((val - minY) / (maxY - minY)) * (height - padding.bottom - padding.top);
+            }
+
+            const scaleZ = (val) => !zKey ? 1 : 4 + ((val - minZ) / (maxZ - minZ)) * 16;
+
+            const ns = "http://www.w3.org/2000/svg";
+            const svg = document.createElementNS(ns, "svg");
+            svg.setAttribute("width", "100%"); svg.setAttribute("height", "100%"); svg.setAttribute("viewBox", `0 0 ${width} ${height}`); svg.style.overflow = "visible";
+
+            const defs = document.createElementNS(ns, "defs");
+            Object.entries(COUNTRY_COLORS).forEach(([country, color]) => {
+                const filter = document.createElementNS(ns, "filter");
+                filter.setAttribute("id", `filter-${country.replace(/\s+/g, '')}`);
+                const flood = document.createElementNS(ns, "feFlood"); flood.setAttribute("flood-color", color); flood.setAttribute("result", "flood"); filter.appendChild(flood);
+                const composite = document.createElementNS(ns, "feComposite"); composite.setAttribute("in", "flood"); composite.setAttribute("in2", "SourceAlpha"); composite.setAttribute("operator", "in"); filter.appendChild(composite);
+                defs.appendChild(filter);
+            });
+            svg.appendChild(defs);
+
+            const gridColor = isDarkMode ? "#ffffff" : "#000000";
+            const gridOpacity = isDarkMode ? "0.05" : "0.03";
+            const textColor = isDarkMode ? "#64748b" : "#94a3b8";
+
+            for (let i = 0; i <= 6; i++) {
+                const val = minX + (i * (maxX - minX)) / 6;
+                const x = scaleX(val);
+                const line = document.createElementNS(ns, "line"); line.setAttribute("x1", x); line.setAttribute("y1", padding.top); line.setAttribute("x2", x); line.setAttribute("y2", height - padding.bottom); line.setAttribute("stroke", gridColor); line.setAttribute("stroke-opacity", gridOpacity); line.setAttribute("stroke-width", "1"); svg.appendChild(line);
+                const text = document.createElementNS(ns, "text"); text.setAttribute("x", x); text.setAttribute("y", height - padding.bottom + 15); text.setAttribute("text-anchor", "middle"); text.setAttribute("fill", textColor); text.setAttribute("font-size", "9px"); text.setAttribute("font-family", "monospace"); text.setAttribute("font-weight", "600"); text.textContent = Math.round(val); svg.appendChild(text);
+            }
+            
+            for (let i = 0; i <= 4; i++) {
+                const val = minY + (i * (maxY - minY)) / 4;
+                const y = scaleY(val); 
+                const line = document.createElementNS(ns, "line"); line.setAttribute("x1", padding.left); line.setAttribute("y1", y); line.setAttribute("x2", width - padding.right); line.setAttribute("y2", y); line.setAttribute("stroke", gridColor); line.setAttribute("stroke-opacity", gridOpacity); line.setAttribute("stroke-width", "1"); svg.appendChild(line);
+                
+                let textVal = val.toLocaleString();
+                if (yAxisLabel === 'Avg' || yAxisLabel === 'Economy') {
+                    textVal = val.toFixed(1);
+                } else {
+                    textVal = Math.round(val).toLocaleString(); 
+                }
+                
+                const text = document.createElementNS(ns, "text"); text.setAttribute("x", padding.left - 10); text.setAttribute("y", y + 3); text.setAttribute("text-anchor", "end"); text.setAttribute("fill", textColor); text.setAttribute("font-size", "9px"); text.setAttribute("font-family", "monospace"); text.setAttribute("font-weight", "600"); text.textContent = textVal; svg.appendChild(text);
+            }
+            
+            const xLabelText = xKey === 'innings' ? "INNINGS" : (xKey === 'matches' ? "MATCHES" : "AVERAGE");
+            const xLabel = document.createElementNS(ns, "text"); xLabel.setAttribute("x", width / 2); xLabel.setAttribute("y", height - 5); xLabel.setAttribute("text-anchor", "middle"); xLabel.setAttribute("fill", isDarkMode ? "#64748b" : "#94a3b8"); xLabel.setAttribute("font-size", "9px"); xLabel.setAttribute("font-weight", "800"); xLabel.setAttribute("letter-spacing", "0.1em"); xLabel.textContent = xLabelText; svg.appendChild(xLabel);
+
+            const yLabel = document.createElementNS(ns, "text"); yLabel.setAttribute("x", 12); yLabel.setAttribute("y", height / 2); yLabel.setAttribute("text-anchor", "middle"); yLabel.setAttribute("transform", `rotate(-90, 12, ${height/2})`); yLabel.setAttribute("fill", isDarkMode ? "#64748b" : "#94a3b8"); yLabel.setAttribute("font-size", "9px"); yLabel.setAttribute("font-weight", "800"); yLabel.setAttribute("letter-spacing", "0.1em"); 
+            yLabel.textContent = yAxisLabel.toUpperCase();
+            svg.appendChild(yLabel);
+
+            if (trendFunction && data.length > 2 && !invertX) {
+                const points = []; const step = (maxX - minX) / 100;
+                for (let x = minX; x <= maxX; x += step) {
+                     const yVal = trendFunction(x); const cy = scaleY(yVal);
+                     if(cy > padding.top && cy < height - padding.bottom) points.push(`${scaleX(x)},${cy}`);
+                }
+                const path = document.createElementNS(ns, "path"); path.setAttribute("d", "M" + points.join(" L")); path.setAttribute("fill", "none"); path.setAttribute("stroke", isDarkMode ? "#60a5fa" : "#475569"); path.setAttribute("stroke-width", "2"); path.setAttribute("class", "trend-line"); path.setAttribute("stroke-linecap", "round"); path.setAttribute("opacity", isDarkMode ? "0.8" : "0.5"); svg.appendChild(path);
+            }
+
+            data.forEach((p, i) => {
+                const cx = scaleX(p[xKey]); const cy = scaleY(p[yKey]); 
+                
+                const countryKey = COUNTRY_COLORS[p.country] ? p.country : "Others";
+                const color = COUNTRY_COLORS[countryKey];
+                
+                const isDimmed = selectedCountry && countryKey !== selectedCountry;
+                const opacity = isDimmed ? 0.1 : 1;
+                const pointerEvents = isDimmed ? 'none' : 'auto';
+
+                const group = document.createElementNS(ns, "g"); group.setAttribute("class", "chart-point"); group.style.opacity = opacity; group.style.pointerEvents = pointerEvents;
+                if (!selectedCountry) group.style.animation = `fadeIn 0.5s ease-out forwards ${i * 0.02}s`; else group.style.transition = "opacity 0.4s ease";
+
+                const hitArea = document.createElementNS(ns, "rect"); hitArea.setAttribute("x", -20); hitArea.setAttribute("y", -20); hitArea.setAttribute("width", 40); hitArea.setAttribute("height", 40); hitArea.setAttribute("fill", "transparent"); group.appendChild(hitArea);
+
+                if (zKey) {
+                    const circle = document.createElementNS(ns, "circle"); const r = scaleZ(p[zKey]); circle.setAttribute("r", r); circle.setAttribute("fill", color); circle.setAttribute("fill-opacity", "0.7"); circle.setAttribute("stroke", "white"); circle.setAttribute("stroke-width", "1.5"); group.appendChild(circle); group.setAttribute("transform", `translate(${cx}, ${cy})`);
+                } else {
+                    const img = document.createElementNS(ns, "image"); 
+                    img.setAttribute("href", currentRole === 'BAT' ? "bat.png" : "bowl.png"); 
+                    img.setAttribute("width", "24"); img.setAttribute("height", "24"); img.setAttribute("x", -12); img.setAttribute("y", -12);
+                    const filterId = `filter-${countryKey.replace(/\s+/g, '')}`; img.setAttribute("filter", `url(#${filterId})`);
+                    group.appendChild(img); group.setAttribute("transform", `translate(${cx}, ${cy})`);
+                }
+
+                const handleEnter = () => {
+                    if (isDimmed) return;
+                    group.style.zIndex = 1000;
+                    if(zKey) { group.querySelector('circle').setAttribute('stroke-width', '2'); group.querySelector('circle').setAttribute('fill-opacity', '1'); group.setAttribute("transform", `translate(${cx}, ${cy}) scale(1.1)`); } else { group.setAttribute("transform", `translate(${cx}, ${cy}) scale(1.4)`); }
+                    
+                    document.getElementById('tt-name').textContent = p.name;
+                    const badge = document.getElementById('tt-country-badge'); badge.textContent = p.country.substring(0, 3).toUpperCase(); badge.style.backgroundColor = color;
+                    
+                    const batContainer = document.getElementById('tt-bat-container');
+                    const bowlContainer = document.getElementById('tt-bowl-container');
+
+                    if (currentRole === 'BAT') {
+                        document.getElementById('tt-lbl-1').innerText = "Innings"; document.getElementById('tt-val-1').innerText = p.innings;
+                        document.getElementById('tt-lbl-2').innerText = "Runs"; document.getElementById('tt-val-2').innerText = p.runs.toLocaleString();
+                        document.getElementById('tt-lbl-3').innerText = "Average"; document.getElementById('tt-val-3').innerText = p.average;
+                        document.getElementById('tt-lbl-4').innerText = "Strike Rate"; document.getElementById('tt-val-4').innerText = p.sr;
+                        
+                        batContainer.style.display = 'flex';
+                        bowlContainer.style.display = 'none'; 
+                        
+                        // New Milestone Logic
+                        let milestonesHTML = '';
+                        if (p.qhs > 0) milestonesHTML += `<div class="flex justify-between items-center"><span class="text-[9px] font-bold text-pink-500 uppercase">400s</span><span class="font-mono font-bold text-sm text-slate-800 dark:text-white">${p.qhs}</span></div>`;
+                        if (p.ths > 0) milestonesHTML += `<div class="flex justify-between items-center"><span class="text-[9px] font-bold text-orange-500 uppercase">300s</span><span class="font-mono font-bold text-sm text-slate-800 dark:text-white">${p.ths}</span></div>`;
+                        if (p.dhs > 0) milestonesHTML += `<div class="flex justify-between items-center"><span class="text-[9px] font-bold text-yellow-500 uppercase">200s</span><span class="font-mono font-bold text-sm text-slate-800 dark:text-white">${p.dhs}</span></div>`;
+                        if (p.hundreds > 0) milestonesHTML += `<div class="flex justify-between items-center"><span class="text-[9px] font-bold text-green-600 uppercase">100s</span><span class="font-mono font-bold text-sm text-slate-800 dark:text-white">${p.hundreds}</span></div>`;
+                        if (p.fifties > 0) milestonesHTML += `<div class="flex justify-between items-center"><span class="text-[9px] font-bold text-[#854d0e] uppercase">50s</span><span class="font-mono font-bold text-sm text-slate-800 dark:text-white">${p.fifties}</span></div>`;
+                        
+                        batContainer.innerHTML = milestonesHTML;
+
+                    } else {
+                        document.getElementById('tt-lbl-1').innerText = "Matches"; document.getElementById('tt-val-1').innerText = p.matches;
+                        document.getElementById('tt-lbl-2').innerText = "Wickets"; document.getElementById('tt-val-2').innerText = p.wickets;
+                        document.getElementById('tt-lbl-3').innerText = "Average"; document.getElementById('tt-val-3').innerText = p.average;
+                        document.getElementById('tt-lbl-4').innerText = "Economy"; document.getElementById('tt-val-4').innerText = p.economy;
+                        
+                        batContainer.style.display = 'none'; 
+                        bowlContainer.style.display = 'flex'; 
+                        
+                        document.getElementById('tt-5w').innerText = p.fiveW || 0;
+                        document.getElementById('tt-bb').innerText = p.best || "-";
+                        document.getElementById('tt-econ').innerText = p.economy;
+                    }
+
+                    const tt = document.getElementById('tooltip'); const rect = container.getBoundingClientRect(); const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft; const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                    tt.style.opacity = 1; tt.style.left = (rect.left + cx + scrollLeft) + 'px'; tt.style.top = (rect.top + cy + scrollTop - 15) + 'px';
+                };
+                const handleLeave = () => {
+                    if (isDimmed) return;
+                    if(zKey) { group.querySelector('circle').setAttribute('stroke-width', '1.5'); group.querySelector('circle').setAttribute('fill-opacity', '0.7'); group.setAttribute("transform", `translate(${cx}, ${cy}) scale(1)`); } else { group.setAttribute("transform", `translate(${cx}, ${cy}) scale(1)`); }
+                    document.getElementById('tooltip').style.opacity = 0;
+                };
+                group.addEventListener('mouseenter', handleEnter); group.addEventListener('mouseleave', handleLeave); group.addEventListener('touchstart', (e) => { e.preventDefault(); handleEnter(); });
+                svg.appendChild(group);
+            });
+            container.appendChild(svg);
+        }
+
+        initDashboard();
+        window.addEventListener('resize', updateCharts);
+    </script>
+    
+    <script>window.va=window.va||function(){(window.va.q=window.va.q||[]).push(arguments)};</script><script src="/_vercel/insights/script.js"></script>
+	<script>window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script><script src="/_vercel/speed-insights/script.js"></script>	
+    
+</body>
+</html>
