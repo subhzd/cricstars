@@ -7,7 +7,6 @@
     <!-- Apple & Favicon Icons -->
     <link rel="apple-touch-icon" href="https://cricstars.aimaverick.me/cric.png">
     <link rel="icon" type="image/png" href="https://cricstars.aimaverick.me/cric.png">
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
@@ -46,7 +45,8 @@
         .glass-card { background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.4) 100%); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1); }
         .dark .glass-card { background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.4) 100%); border: 1px solid rgba(255, 255, 255, 0.05); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3); }
         
-        #tooltip { position: absolute; opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease; z-index: 9999; transform: translate(-50%, -120%); }
+        /* Updated Tooltip transition for smooth movement */
+        #tooltip { position: absolute; opacity: 0; pointer-events: none; transition: opacity 0.2s ease, left 0.1s ease, top 0.1s ease; z-index: 9999; transform: translate(-50%, -120%); }
         #tooltip::after { content: ''; position: absolute; top: 100%; left: 50%; margin-left: -6px; border-width: 6px; border-style: solid; border-color: var(--tooltip-bg, white) transparent transparent transparent; }
         
         .chart-point { transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease, filter 0.3s ease; cursor: pointer; }
@@ -227,6 +227,8 @@
         // SEPARATE DATA STORES
         let BAT_DATA = [];
         let BOWL_DATA = [];
+        // Track the currently active tooltip cleanup function
+        let activeTooltipReset = null;
 
         // Colors
         const COUNTRY_COLORS = { 
@@ -343,6 +345,15 @@
                 minInnings = parseInt(e.target.value);
                 document.getElementById('inningsVal').innerText = minInnings;
                 updateCharts();
+            });
+
+            // Global listener to close tooltips when clicking outside
+            document.addEventListener('click', (e) => {
+                // If the click is NOT inside a chart-point, close the active tooltip
+                if (!e.target.closest('.chart-point') && activeTooltipReset) {
+                    activeTooltipReset();
+                    activeTooltipReset = null;
+                }
             });
         }
 
@@ -599,6 +610,12 @@
                 }
 
                 const handleEnter = () => {
+                    // Logic to handle global active tooltip reset
+                    if (activeTooltipReset && activeTooltipReset !== handleLeave) {
+                        activeTooltipReset();
+                    }
+                    activeTooltipReset = handleLeave;
+
                     if (isDimmed) return;
                     group.style.zIndex = 1000;
                     if(zKey) { group.querySelector('circle').setAttribute('stroke-width', '2'); group.querySelector('circle').setAttribute('fill-opacity', '1'); group.setAttribute("transform", `translate(${cx}, ${cy}) scale(1.1)`); } else { group.setAttribute("transform", `translate(${cx}, ${cy}) scale(1.4)`); }
@@ -642,15 +659,48 @@
                         document.getElementById('tt-econ').innerText = p.economy;
                     }
 
-                    const tt = document.getElementById('tooltip'); const rect = container.getBoundingClientRect(); const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft; const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-                    tt.style.opacity = 1; tt.style.left = (rect.left + cx + scrollLeft) + 'px'; tt.style.top = (rect.top + cy + scrollTop - 15) + 'px';
+                    const tt = document.getElementById('tooltip'); 
+                    const rect = container.getBoundingClientRect(); 
+                    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft; 
+                    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                    
+                    // Smart Positioning
+                    let left = rect.left + cx + scrollLeft;
+                    let top = rect.top + cy + scrollTop - 15;
+                    const ttWidth = 240; // Approx min-width
+                    const windowWidth = window.innerWidth;
+
+                    // Ensure tooltip doesn't bleed off right screen
+                    if (left + ttWidth > windowWidth - 10) {
+                        left = windowWidth - ttWidth - 10;
+                    }
+                    if (left < 10) left = 10;
+
+                    tt.style.opacity = 1; 
+                    tt.style.left = left + 'px'; 
+                    tt.style.top = top + 'px';
                 };
                 const handleLeave = () => {
+                    // Check if this point is currently the active one globally before clearing
+                    if (activeTooltipReset === handleLeave) {
+                        activeTooltipReset = null;
+                    }
+
                     if (isDimmed) return;
                     if(zKey) { group.querySelector('circle').setAttribute('stroke-width', '1.5'); group.querySelector('circle').setAttribute('fill-opacity', '0.7'); group.setAttribute("transform", `translate(${cx}, ${cy}) scale(1)`); } else { group.setAttribute("transform", `translate(${cx}, ${cy}) scale(1)`); }
                     document.getElementById('tooltip').style.opacity = 0;
                 };
-                group.addEventListener('mouseenter', handleEnter); group.addEventListener('mouseleave', handleLeave); group.addEventListener('touchstart', (e) => { e.preventDefault(); handleEnter(); });
+                
+                // Desktop Hover Interaction
+                group.addEventListener('mouseenter', handleEnter); 
+                group.addEventListener('mouseleave', handleLeave); 
+                
+                // Mobile Click Interaction (allows scroll, open on tap)
+                group.addEventListener('click', (e) => { 
+                    e.stopPropagation(); // Prevent document click from immediately closing it
+                    handleEnter(); 
+                });
+                
                 svg.appendChild(group);
             });
             container.appendChild(svg);
@@ -659,9 +709,9 @@
         initDashboard();
         window.addEventListener('resize', updateCharts);
     </script>
-   
+    
     <script>window.va=window.va||function(){(window.va.q=window.va.q||[]).push(arguments)};</script><script src="/_vercel/insights/script.js"></script>
 	<script>window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script><script src="/_vercel/speed-insights/script.js"></script>	
-    
+
 </body>
 </html>
